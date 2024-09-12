@@ -11,6 +11,7 @@ use ron::de::SpannedError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::root_motion::{RootMotionBakeType, RootMotionData, SerializedRootMotionData};
 use crate::{AnimationClip, AnimationTargetId};
 
 /// A graph structure that describes how animation clips are to be blended
@@ -141,6 +142,11 @@ pub struct AnimationGraphNode {
     /// this node and its descendants *cannot* animate mask group N.
     pub mask: AnimationMask,
 
+    /// Optional data about root motion for the associated clip
+    ///
+    /// TODO:
+    pub root_motion: Option<RootMotionData>,
+
     /// The weight of this node.
     ///
     /// Weights are propagated down to descendants. Thus if an animation clip
@@ -200,6 +206,8 @@ pub struct SerializedAnimationGraphNode {
     pub clip: Option<SerializedAnimationClip>,
     /// Corresponds to the `mask` field on [`AnimationGraphNode`].
     pub mask: AnimationMask,
+    /// Corresponds to the `root_motion` field on [`AnimationGraphNode`].
+    pub root_motion: Option<SerializedRootMotionData>,
     /// Corresponds to the `weight` field on [`AnimationGraphNode`].
     pub weight: f32,
 }
@@ -281,6 +289,7 @@ impl AnimationGraph {
         let node_index = self.graph.add_node(AnimationGraphNode {
             clip: Some(clip),
             mask: 0,
+            root_motion: None,
             weight,
         });
         self.graph.add_edge(parent, node_index, ());
@@ -301,6 +310,27 @@ impl AnimationGraph {
         let node_index = self.graph.add_node(AnimationGraphNode {
             clip: Some(clip),
             mask,
+            root_motion: None,
+            weight,
+        });
+        self.graph.add_edge(parent, node_index, ());
+        node_index
+    }
+
+    pub fn add_clip_with_root_motion(
+        &mut self,
+        clip: Handle<AnimationClip>,
+        root_motion_bake_type: RootMotionBakeType,
+        weight: f32,
+        parent: AnimationNodeIndex,
+    ) -> AnimationNodeIndex {
+        let node_index = self.graph.add_node(AnimationGraphNode {
+            clip: Some(clip),
+            mask: 0,
+            root_motion: Some(RootMotionData {
+                bake_type: root_motion_bake_type,
+                curve: None,
+            }),
             weight,
         });
         self.graph.add_edge(parent, node_index, ());
@@ -340,6 +370,7 @@ impl AnimationGraph {
         let node_index = self.graph.add_node(AnimationGraphNode {
             clip: None,
             mask: 0,
+            root_motion: None,
             weight,
         });
         self.graph.add_edge(parent, node_index, ());
@@ -363,6 +394,7 @@ impl AnimationGraph {
         let node_index = self.graph.add_node(AnimationGraphNode {
             clip: None,
             mask,
+            root_motion: None,
             weight,
         });
         self.graph.add_edge(parent, node_index, ());
@@ -490,6 +522,7 @@ impl Default for AnimationGraphNode {
         Self {
             clip: None,
             mask: 0,
+            root_motion: None,
             weight: 1.0,
         }
     }
@@ -535,6 +568,7 @@ impl AssetLoader for AnimationGraphAssetLoader {
                         }
                     }),
                     mask: serialized_node.mask,
+                    root_motion: None, // TODO:
                     weight: serialized_node.weight,
                 },
                 |_, _| (),
@@ -559,6 +593,7 @@ impl From<AnimationGraph> for SerializedAnimationGraph {
                 |_, node| SerializedAnimationGraphNode {
                     weight: node.weight,
                     mask: node.mask,
+                    root_motion: None,
                     clip: node.clip.as_ref().map(|clip| match clip.path() {
                         Some(path) => SerializedAnimationClip::AssetPath(path.clone()),
                         None => SerializedAnimationClip::AssetId(clip.id()),

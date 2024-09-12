@@ -10,6 +10,7 @@
 pub mod animatable;
 pub mod graph;
 pub mod transition;
+pub mod root_motion;
 mod util;
 
 use std::cell::RefCell;
